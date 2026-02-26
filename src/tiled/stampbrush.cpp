@@ -394,24 +394,14 @@ void StampBrush::doPaint(int flags, QHash<TileLayer*, QRegion> *paintedRegions)
     SharedMap preview = mPreviewMap;
     if (!preview)
         return;
-    /** 
-    * when erasing empty tiles, mark all empty cells in the preview as
-    *
-    * checked so that modifiedTileRegion() includes them in the paint
-    *
-    * region, causing them to overwrite existing tiles on the target layer.
-    */
+
     if (mIsEraseEmpty) {
-        for (auto layer : preview->tileLayers()) {
-            auto tileLayer = static_cast<TileLayer*>(layer);
-            for (auto it = tileLayer->begin(); it != tileLayer->end(); ++it) {
-                if (it.value().isEmpty()) {
-                    Cell cell = it.value();
-                    cell.setChecked(true);
-                    tileLayer->setCell(it.key().x(), it.key().y(), cell);
-                }
-            }
-        }
+        const QRegion eraseRegion = preview->modifiedTileRegion();
+        if (!eraseRegion.isEmpty())
+            mapDocument()->eraseTileLayers(eraseRegion,
+                                           false,
+                                           (flags & Mergeable) == Mergeable);
+        return;
     }
 
     mapDocument()->paintTileLayers(*preview,
@@ -581,15 +571,7 @@ void StampBrush::drawPreviewLayer(const QVector<QPoint> &points)
             if (regionCache.contains(map)) {
                 stampRegion = regionCache.value(map);
             } else {
-                /** 
-                * When erasing empty tiles, the full stamp bounds is the
-                *
-                * region, not just the non-empty tile positions.
-                */
-                if (mIsEraseEmpty)
-                    stampRegion = map->tileBoundingRect();
-                else
-                    stampRegion = map->modifiedTileRegion();
+                stampRegion = map->modifiedTileRegion();
                 regionCache.insert(map, stampRegion);
             }
 
@@ -697,17 +679,8 @@ void StampBrush::updatePreview(QPoint tilePos)
             break;
         }
 
-        if (mPreviewMap) {
-            /** 
-            * When erasing empty tiles, show the full stamp bounds so the
-            *
-            * user can see where empty cells will erase.
-            */
-            if (mIsEraseEmpty)
-                tileRegion = mPreviewMap->tileBoundingRect();
-            else
-                tileRegion = mPreviewMap->modifiedTileRegion();
-        }
+        if (mPreviewMap)
+            tileRegion = mPreviewMap->modifiedTileRegion();
 
         if (tileRegion.isEmpty())
             tileRegion = QRect(tilePos, tilePos);
